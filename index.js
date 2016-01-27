@@ -66,6 +66,13 @@ function _parallel(name, fn, key) {
     }
 
     specs.forEach(function(spec) {
+
+      spec.ctx = {
+        test: {
+          title: spec.name
+        }
+      };
+
       // beforeEach/spec/afterEach are grouped as a cancellable promise
       // and ran as part of a domain
       domain.create().on('error', function(err) {
@@ -73,15 +80,15 @@ function _parallel(name, fn, key) {
         spec.promise.cancel(err);
       }).run(function() {
         process.nextTick(function() {
-          spec.promise = parentHooks.beforeEach()
+          spec.promise = parentHooks.beforeEach(spec.ctx)
             .cancellable()
-            .then(hooks.beforeEach)
+            .then(hooks.beforeEach.bind(null, spec.ctx))
             .then(spec.getPromise)
             .then(function() {
               clearTimeout(spec.timeout);
             })
-            .then(hooks.afterEach)
-            .then(parentHooks.afterEach);
+            .then(hooks.afterEach.bind(null, spec.ctx))
+            .then(parentHooks.afterEach.bind(null, spec.ctx));
         });
       });
     });
@@ -255,7 +262,7 @@ function patchHooks(hooks) {
  * @returns {function}
  */
 function createWrapper(fn, ctx) {
-  return function() {
+  return function(ctxOverride) {
     return new Promise(function(resolve, reject) {
       var cb = function(err) {
         if (err) return reject(err);
@@ -267,7 +274,7 @@ function createWrapper(fn, ctx) {
         fn = Promise.coroutine(fn);
       }
 
-      var res = fn.call(ctx || this, cb);
+      var res = fn.call(ctxOverride || ctx || this, cb);
 
       // Synchronous spec, or using promises rather than callbacks
       if (!fn.length || (res && res.then)) {
@@ -303,10 +310,10 @@ function getParentHooks(context) {
       array.reverse();
     }
 
-    res[type] = function() {
+    res[type] = function(ctx) {
       var promise = Promise.resolve();
       array.forEach(function(hook) {
-        promise = promise.then(hook());
+        promise = promise.then(hook.call(ctx));
       });
 
       return promise;
