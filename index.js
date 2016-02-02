@@ -67,7 +67,10 @@ function _parallel(name, fn, key) {
 
     specs.forEach(function(spec) {
 
-      spec.ctx.test.title = spec.name;
+      spec.ctx = {
+        timeout: spec.ctx.timeout,
+        test: {title: spec.name}
+      };
 
       // beforeEach/spec/afterEach are grouped as a cancellable promise
       // and ran as part of a domain
