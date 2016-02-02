@@ -67,28 +67,41 @@ function _parallel(name, fn, key) {
 
     specs.forEach(function(spec) {
 
-      spec.ctx = {
-        test: {
-          title: spec.name
-        }
-      };
+      spec.ctx.test.title = spec.name;
 
       // beforeEach/spec/afterEach are grouped as a cancellable promise
       // and ran as part of a domain
       domain.create().on('error', function(err) {
+
         spec.error = err;
-        spec.promise.cancel(err);
+        if( spec.promise ) {
+
+          spec.promise.cancel(err);
+        }
       }).run(function() {
+
+        var err;
         process.nextTick(function() {
           spec.promise = parentHooks.beforeEach(spec.ctx)
             .cancellable()
             .then(hooks.beforeEach.bind(null, spec.ctx))
+            .catch(function(beforeEachErr) {
+              throw beforeEachErr;
+            })
             .then(spec.getPromise)
+            .catch(function(testErr) {
+              err = testErr;
+            })
             .then(function() {
               clearTimeout(spec.timeout);
             })
             .then(hooks.afterEach.bind(null, spec.ctx))
-            .then(parentHooks.afterEach.bind(null, spec.ctx));
+            .then(parentHooks.afterEach.bind(null, spec.ctx))
+            .then(function() {
+              if( err ) {
+                throw err;
+              }
+            });
         });
       });
     });
@@ -117,7 +130,8 @@ function _parallel(name, fn, key) {
     // Retrieve spec contexts from suite, and patch
     this.tests.forEach(function(test, i) {
       specs[i].ctx = test.ctx;
-      patchSpecCtx(specs[i])
+
+      patchSpecCtx(specs[i], test);
     });
 
     before(function() {
@@ -209,11 +223,14 @@ function patchIt(specs) {
  *
  * @param {Spec}
  */
-function patchSpecCtx(spec) {
+function patchSpecCtx(spec, test) {
   var origTimeout = spec.ctx.timeout.bind(spec.ctx);
   spec.ctx.timeout = function(ms) {
+
     // Disable original timeout
     origTimeout(0);
+    test.clearTimeout();
+
     // Apply our timeout
     ms = ms || 1e9;
     spec.timeout = setTimeout(function() {
@@ -222,7 +239,12 @@ function patchSpecCtx(spec) {
       error.stack = null;
       throw error;
     }, ms);
+
   }
+
+  // Prevent mocha from setting its own timeout
+  test.resetTimeout = function() {
+  };
 }
 
 /**
@@ -265,6 +287,7 @@ function createWrapper(fn, ctx) {
   return function(ctxOverride) {
     return new Promise(function(resolve, reject) {
       var cb = function(err) {
+
         if (err) return reject(err);
         resolve();
       };
