@@ -69,7 +69,13 @@ function _parallel(name, fn, key) {
     // If it.only() was used, only invoke that subset of specs
     var onlySpecs = specs.filter(function(spec) {
 
-      return spec.only && grep ? spec.name.test(grep) : true;
+      if( grep ) {
+
+        return grep.test(spec.name);
+
+      }
+
+      return spec.only;
     });
 
     if (onlySpecs.length) {
