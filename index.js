@@ -55,10 +55,21 @@ function _parallel(name, fn, key) {
     };
   });
 
+  var grep;
+
+  for( var i = 0; i < process.argv.length; i++ ) {
+    if( process.argv[i] === '-g' ) {
+
+      grep = new RegExp( process.argv[i + 1] );
+      break;
+    }
+  }
+
   run = function() {
     // If it.only() was used, only invoke that subset of specs
     var onlySpecs = specs.filter(function(spec) {
-      return spec.only;
+
+      return spec.only && grep ? spec.name.test(grep) : true;
     });
 
     if (onlySpecs.length) {
